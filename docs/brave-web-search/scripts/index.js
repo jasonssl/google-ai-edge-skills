@@ -1,21 +1,20 @@
-/* * Copyright 2026 Google LLC 
- * Fixed for CORS using Proxy logic
+/*
+ * Copyright 2026 Google LLC
+ * Brave Search - Text Only Version
  */
 
 window['ai_edge_gallery_get_result'] = async (dataStr, secret) => {
   try {
     const jsonData = JSON.parse(dataStr || '{}');
     const query = jsonData.query || '';
-    if (!query) return JSON.stringify({ error: "No query provided." });
+    if (!query) return JSON.stringify({ error: "No search query provided." });
 
     const apiKey = secret ? secret.trim() : null;
-    if (!apiKey) return JSON.stringify({ error: "API Key missing in Settings." });
+    if (!apiKey) return JSON.stringify({ error: "API Key missing. Add it in Skill Settings." });
 
-    // 1. THE FIX: Wrap the Brave URL in a CORS proxy
+    // Use CORS proxy + Brave Web Search API
     const targetUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`;
     const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-
-    console.log("Attempting proxied search...");
 
     const response = await fetch(proxiedUrl, {
       method: 'GET',
@@ -28,40 +27,28 @@ window['ai_edge_gallery_get_result'] = async (dataStr, secret) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Brave API Error ${response.status}: ${errorText}`);
+      throw new Error(`Brave API Error ${response.status}`);
     }
 
     const data = await response.json();
-    let searchResults = [];
-    let textSummary = `--- WEB SEARCH RESULTS FOR "${query}" ---\n\n`;
+    let textSummary = `--- WEB SEARCH RESULTS FOR: ${query} ---\n\n`;
 
-    if (data.web && data.web.results && data.web.results.length > 0) {
+    if (data.web?.results?.length > 0) {
       data.web.results.slice(0, 5).forEach((item, index) => {
-        textSummary += `[${index + 1}] ${item.title}\n${item.description}\n\n`;
-        searchResults.push({
-          title: item.title,
-          url: item.url,
-          snippet: item.description
-        });
+        // We still include the URL in text so the AI can cite its sources
+        textSummary += `[Source ${index + 1}]\nTitle: ${item.title}\nURL: ${item.url}\nSnippet: ${item.description}\n\n`;
       });
     } else {
-      textSummary += "No results found on the web.";
+      textSummary += "No relevant web results were found.";
     }
 
-    // 2. Prepare Data for UI
-    const resultsString = JSON.stringify(searchResults);
-    const compressedData = btoa(unescape(encodeURIComponent(resultsString)));
-
+    // Return ONLY the text result. No 'webview' key needed.
     return JSON.stringify({
-      webview: { url: `../assets/webview.html?q=${encodeURIComponent(query)}&data=${compressedData}&v=${Date.now()}` },
-      result: textSummary
+      result: textSummary.substring(0, 4000) // Context limit safety cap
     });
 
-  } catch (apiError) {
-    // This will now show the actual error message in the Gallery log
-    console.error('Skill Execution Failed: ' + apiError.toString());
-    return JSON.stringify({ 
-      error: `Search failed: ${apiError.message}. This usually means a connection issue or API limit.` 
-    });
+  } catch (e) {
+    console.error('Text Search Failed: ' + e.toString());
+    return JSON.stringify({ error: `Search failed: ${e.message}` });
   }
 };
