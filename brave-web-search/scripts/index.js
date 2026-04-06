@@ -59,12 +59,11 @@ window['ai_edge_gallery_get_result'] = async (dataStr, secret) => {
         textSummaryForModel += "No results found on the web.";
       }
     } catch (apiError) {
-      // FIX: Log the actual message string so it doesn't show up as "{}"
-      console.error('Brave Fetch Failed:', apiError.message);
-      
-      return JSON.stringify({ 
-        result: `Search failed. Error: ${apiError.message}. Ensure your Brave API key has 'Web Search' permissions enabled in the Brave API dashboard.` 
-      });
+    // Use .toString() to force the error message to appear in the Gallery logs
+    console.error('Brave API failed: ' + apiError.toString());
+    
+    textSummaryForModel += `Failed to fetch search results: ${apiError.message}`;
+    searchResults = [{ error: true, message: apiError.message }];
     }
 
     // 3. Compress data for the UI
