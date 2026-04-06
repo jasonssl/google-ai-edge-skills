@@ -16,6 +16,7 @@ This skill allows you to search the live internet.
 Load this skill in the Google AI Edge Gallery app using the webhost path above, then try prompts "Show me the top 3 news for today"
 
 ========
+
 Licensed under the Apache License, Version 2.0 (the "License"); \
 you may not use this file except in compliance with the License. \
 You may obtain a copy of the License at
