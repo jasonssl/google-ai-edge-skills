@@ -1,83 +1,67 @@
-/*
- * Copyright 2026 Google LLC
- * Improved Brave Search Skill Runner
+/* * Copyright 2026 Google LLC 
+ * Fixed for CORS using Proxy logic
  */
 
 window['ai_edge_gallery_get_result'] = async (dataStr, secret) => {
   try {
     const jsonData = JSON.parse(dataStr || '{}');
     const query = jsonData.query || '';
+    if (!query) return JSON.stringify({ error: "No query provided." });
 
-    if (!query) return JSON.stringify({ error: "Search query was empty." });
+    const apiKey = secret ? secret.trim() : null;
+    if (!apiKey) return JSON.stringify({ error: "API Key missing in Settings." });
 
-    // 1. Clean the secret (API keys often have trailing spaces/newlines)
-    const BRAVE_API_KEY = secret ? secret.trim() : null;
-    
-    if (!BRAVE_API_KEY) {
-      return JSON.stringify({ 
-        result: "ERROR: API Key is missing. Please go to the Skill Settings (gear icon) and paste your key." 
-      });
+    // 1. THE FIX: Wrap the Brave URL in a CORS proxy
+    const targetUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`;
+    const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+    console.log("Attempting proxied search...");
+
+    const response = await fetch(proxiedUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Subscription-Token': apiKey,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Brave API Error ${response.status}: ${errorText}`);
     }
 
-    // 2. Use the 2026 recommended LLM-Context endpoint for better agent results
-    // Falling back to web/search if you prefer raw URLs
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`;
-
+    const data = await response.json();
     let searchResults = [];
-    let textSummaryForModel = `--- WEB SEARCH RESULTS FOR "${query}" ---\n\n`;
+    let textSummary = `--- WEB SEARCH RESULTS FOR "${query}" ---\n\n`;
 
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors', // Explicitly request CORS
-        headers: {
-          'Accept': 'application/json',
-          'X-Subscription-Token': BRAVE_API_KEY,
-          'Cache-Control': 'no-cache', // Required by Brave API v1.x (2026)
-          'X-Brave-API-Version': '2026-01-01' 
-        }
-      });
-
-      if (!response.ok) {
-        // If it's an API error (401, 403, 429), we get a real message here
-        const errorText = await response.text();
-        throw new Error(`Status ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      if (data.web && data.web.results && data.web.results.length > 0) {
-        data.web.results.slice(0, 5).forEach((item, index) => {
-          textSummaryForModel += `[${index + 1}] ${item.title}\n${item.description}\n\n`;
-          searchResults.push({
-            title: item.title,
-            url: item.url,
-            snippet: item.description
-          });
+    if (data.web && data.web.results && data.web.results.length > 0) {
+      data.web.results.slice(0, 5).forEach((item, index) => {
+        textSummary += `[${index + 1}] ${item.title}\n${item.description}\n\n`;
+        searchResults.push({
+          title: item.title,
+          url: item.url,
+          snippet: item.description
         });
-      } else {
-        textSummaryForModel += "No results found on the web.";
-      }
-    } catch (apiError) {
-    // Use .toString() to force the error message to appear in the Gallery logs
-    console.error('Brave API failed: ' + apiError.toString());
-    
-    textSummaryForModel += `Failed to fetch search results: ${apiError.message}`;
-    searchResults = [{ error: true, message: apiError.message }];
+      });
+    } else {
+      textSummary += "No results found on the web.";
     }
 
-    // 3. Compress data for the UI
+    // 2. Prepare Data for UI
     const resultsString = JSON.stringify(searchResults);
     const compressedData = btoa(unescape(encodeURIComponent(resultsString)));
 
-    // 4. Return to Gallery
     return JSON.stringify({
-      webview: { url: `../assets/webview.html?q=${encodeURIComponent(query)}&data=${compressedData}` },
-      result: textSummaryForModel.substring(0, 3500) // Stay within context limits
+      webview: { url: `../assets/webview.html?q=${encodeURIComponent(query)}&data=${compressedData}&v=${Date.now()}` },
+      result: textSummary
     });
 
-  } catch (e) {
-    console.error('Skill Error:', e.message);
-    return JSON.stringify({ error: `Critical failure: ${e.message}` });
+  } catch (apiError) {
+    // This will now show the actual error message in the Gallery log
+    console.error('Skill Execution Failed: ' + apiError.toString());
+    return JSON.stringify({ 
+      error: `Search failed: ${apiError.message}. This usually means a connection issue or API limit.` 
+    });
   }
 };
