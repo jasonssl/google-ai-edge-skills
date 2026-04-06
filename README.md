@@ -1,18 +1,18 @@
-Brave Web Search Skill
+**Brave Web Search Skill**
 ========
 
-Skill Webhost Path
+**Skill Webhost Path**\
 https://jasonssl.github.io/google-ai-edge-skills/brave-web-search/
 
-Skill Source Repository
+**Skill Source Repository**\
 https://github.com/jasonssl/google-ai-edge-skills/tree/main/docs/brave-web-search
 
-Skill Description
+**Skill Description**\
 This skill allows you to search the live internet. 
 
-Skill Type: JS skill
+**Skill Type:** JS skill
 
-How to use
+**How to use**\
 Load this skill in the Google AI Edge Gallery app using the webhost path above, then try prompts "Show me the top 3 news for today"
 
 ========
